@@ -1,50 +1,92 @@
-# Introduction
+# SDR Scanner NG
 
-This project is part of a larger `SDR` project called [https://github.com/shajen/sdr-hub](https://github.com/shajen/sdr-hub). Please familiar with it before starting work.
+`rtl-sdr-scanner-ng` is an experimental next-generation SDR scanner project derived from and inspired by [`shajen/rtl-sdr-scanner-cpp`](https://github.com/shajen/rtl-sdr-scanner-cpp), [`shajen/sdr-hub`](https://github.com/shajen/sdr-hub), and [`shajen/sdr-monitor`](https://github.com/shajen/sdr-monitor).
 
-This project contains sdr scanner written in `c++` to **scan and record multiple interesting frequencies bandwidth in the same time** (eg. 108 MHz, 144 MHz, 440 Mhz,  etc). This is possible by switching quickly between frequencies bandwidth.
+The original projects provide a strong proof of concept: wideband SDR scanning, automatic transmission detection, simultaneous recording of multiple transmissions inside one received band, and integration with a monitor/web stack. This fork explores a more scalable scanner architecture for unknown signals, pre-trigger capture, multi-SDR operation, and optional Zynq offload.
 
-Sdr scanner also allows you to record multiple transmissions simultaneously (if they are transmitted on the same band). For example, if one transmission is on 145.200 MHz and the other is on 145.600 MHz, the scanner will record and save both!
+## Status
 
-# Supported devices
+This repository is currently a design and prototyping fork. The long-term goal is not to simply polish the existing scanner, but to evaluate a new scanner core that can scale better when many transmissions or multiple SDR/baseband sources are active.
 
-Sdr scanner use [SoapySDR](https://github.com/pothosware/SoapySDR) library to get data so it support all devices that are supported by `SoapySDR`. Full list of supported devices [here](https://github.com/pothosware/SoapyOsmo/wiki).
+The first implementation target is a host-based reference scanner. FPGA/Zynq acceleration should only be added after the host-side algorithms and data model are validated.
 
-# Quickstart
+## Goals
 
-Instructions [here](https://github.com/shajen/sdr-hub?tab=readme-ov-file#quickstart).
+- Detect unknown transmissions in a wideband I/Q stream.
+- Estimate center frequency, occupied bandwidth, power/SNR, and duration.
+- Record selected narrowband I/Q with pre-trigger context.
+- Support variable bandwidths such as 6.25 kHz, 12.5 kHz, 25 kHz, and wider user-defined signals.
+- Support multiple SDR/baseband sources.
+- Keep one stable processing pipeline per SDR source where possible.
+- Use GNU Radio and/or custom C++ DSP blocks for streaming signal processing.
+- Evaluate Zynq-7020 offload for buffering, detection, and selected narrowband extraction.
 
-# Build from sources
+## Architecture Direction
 
-Clone repository and run:
+The preferred processing model is:
+
+```text
+Wideband I/Q
+   ↓
+wideband or coarse-band detector
+   ↓
+estimated emission object
+   ↓
+dynamic narrowband extraction
+   ↓
+recording, demodulation, classification, storage
 ```
-docker build -t shajen/sdr-scanner .
+
+The project should avoid starting heavy independent processing graphs for every detected signal when a shared pipeline or shared ring buffer can be used instead.
+
+For the detailed design, milestones, and Zynq/host split, see:
+
+- [`docs/project-description.md`](docs/project-description.md)
+
+## Recommended Milestone Path
+
+1. **Host Reference Scanner** — Zynq or SDR sends full I/Q; host performs detection, ring buffering, extraction, and recording.
+2. **Zynq-Side Ring Buffer** — move pre-trigger buffering closer to the I/Q source while keeping decisions on the host.
+3. **Zynq FFT/PSD Detection** — emit compact signal events instead of requiring continuous full-rate host-side detection.
+4. **Zynq DDC Workers** — extract a limited number of active narrowband signals before sending them to the host.
+5. **Coarse Channelizer Evaluation** — evaluate channelization only after real measurements justify the added complexity.
+
+## Relationship to the Original Project
+
+This fork keeps attribution to the original work and intends to remain compatible with the broader SDR hub/monitor concept where practical. Some changes may be too invasive for direct upstream integration, so the initial work should happen in this experimental branch/fork. Smaller improvements, documentation updates, and bug fixes may still be suitable for upstream pull requests.
+
+## Supported Devices
+
+The original scanner uses [SoapySDR](https://github.com/pothosware/SoapySDR), which allows operation with SDR devices supported by the SoapySDR ecosystem. The next-generation scanner should preserve this flexibility where possible.
+
+## Build
+
+The original project can be built with Docker:
+
+```bash
+docker build -t sdr-scanner-ng .
 ```
 
-# Contributing
+Build and runtime instructions will be updated as the new scanner architecture evolves.
 
-In general don't be afraid to send pull request. Use the "fork-and-pull" Git workflow.
+## Contributing
 
-1. **Fork** the repo
-2. **Clone** the project to your own machine
-3. **Commit** changes to your own branch
-4. **Push** your work back up to your fork
-5. Submit a **Pull request** so that we can review your changes
+This repository is currently experimental. Contributions are welcome, especially in these areas:
 
-NOTE: Be sure to merge the **latest** from **upstream** before making a pull request!
+- architecture review,
+- GNU Radio/C++ scanner design,
+- signal detection and tracking,
+- ring-buffered I/Q capture,
+- metadata and recording formats,
+- Zynq/FPGA offload experiments,
+- documentation.
 
-# Donations
+Large architectural changes should be discussed before implementation.
 
-If you enjoy this project and want to thanks, please use follow link:
+## License and Attribution
 
-- [PayPal](https://www.paypal.com/donate/?hosted_button_id=6JQ963AU688QN)
+This project is based on GPLv3-licensed upstream work and remains licensed under the GNU General Public License v3.0. Original work and project concept credit belongs to the upstream author and contributors of the `shajen` SDR projects.
 
-- [Revolut](https://revolut.me/borysm2b)
-
-- BTC address: 18UDYg9mu26K2E3U479eMvMZXPDpswR7Jn
-
-# License
-
-[![License](https://img.shields.io/:license-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl.html)
-
-- *[GPLv3 license](https://www.gnu.org/licenses/gpl.html)*
+- [`shajen/rtl-sdr-scanner-cpp`](https://github.com/shajen/rtl-sdr-scanner-cpp)
+- [`shajen/sdr-hub`](https://github.com/shajen/sdr-hub)
+- [`shajen/sdr-monitor`](https://github.com/shajen/sdr-monitor)
